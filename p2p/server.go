@@ -889,7 +889,7 @@ func (srv *Server) listenLoop() {
 
 		remoteIP := netutil.AddrIP(fd.RemoteAddr())
 		if err := srv.checkInboundConn(remoteIP); err != nil {
-			srv.log.Debug("Rejected inbound connection", "addr", fd.RemoteAddr(), "err", err)
+			srv.log.Debug("Rejected peer connection", "addr", fd.RemoteAddr(), "err", err)
 			fd.Close()
 			slots <- struct{}{}
 			continue
@@ -900,7 +900,7 @@ func (srv *Server) listenLoop() {
 				addr = tcp
 			}
 			fd = newMeteredConn(fd, true, addr)
-			srv.log.Trace("Accepted connection", "addr", fd.RemoteAddr())
+			srv.log.Trace("Accepted peer connection", "addr", fd.RemoteAddr())
 		}
 		go func() {
 			srv.SetupConn(fd, inboundConn, nil)

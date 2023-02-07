@@ -580,7 +580,6 @@ func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 	// Select the block reward for the ProofOfAuthorityMaster
 	blockReward := FrontierBlockReward
 	reward := new(big.Int).Set(blockReward)
-	author, err := c.Author(header)
 	state.AddBalance(proofOfAuthorityMaster, reward)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
