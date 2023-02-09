@@ -576,10 +576,20 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 // Finalize implements consensus.Engine, ensuring no uncles are set
 func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, withdrawals []*types.Withdrawal) {
 
-	// Select the block reward for the ProofOfAuthorityMaster
-	blockReward := FrontierBlockReward
-	reward := new(big.Int).Set(blockReward)
-	state.AddBalance(c.signer, reward)
+	// Recovery of the signers of the previous block
+	number := header.Number.Uint64()
+	snap, _ := c.snapshot(chain, number-1, header.ParentHash, nil)
+
+	// Awarding rewards to signers of the last block
+	blockReward := new(big.Int).Set(FrontierBlockReward)
+	numberOfSingers := len(snap.signers())
+	if numberOfSingers > 0 {
+		for i := 0; i < numberOfSingers; i++ {
+			signer := snap.signers()[i]
+			reward := new(big.Int).Div(blockReward, big.NewInt(int64(numberOfSingers)))
+			state.AddBalance(signer, reward)
+		}
+	}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
 }
