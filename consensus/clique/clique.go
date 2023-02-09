@@ -578,10 +578,12 @@ func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 	// Recovery of the signer of the previous block
 	signer, ok := c.signatures.Get(header.ParentHash)
 	// Awarding rewards to signer of the last block
-	if ok && signer != (common.Address{}) {
+	// 14700 GENESISQ
+	if header.Number.Uint64() > 14700 && ok && signer != (common.Address{}) {
 		blockReward := new(big.Int).Set(FrontierBlockReward)
 		reward := new(big.Int).Set(blockReward)
 		state.AddBalance(signer, reward)
+		log.Info("Clique rewards", "signer", signer, "reward", reward)
 	}
 
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
