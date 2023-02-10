@@ -583,7 +583,6 @@ func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 		blockReward := new(big.Int).Set(FrontierBlockReward)
 		reward := new(big.Int).Set(blockReward)
 		state.AddBalance(signer, reward)
-		log.Info("Clique rewards", "signer", signer, "reward", reward)
 	}
 
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
