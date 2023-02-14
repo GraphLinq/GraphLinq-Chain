@@ -100,6 +100,8 @@ func KnownDNSNetwork(genesis common.Hash, protocol string) string {
 	switch genesis {
 	case MainnetGenesisHash:
 		net = "mainnet"
+	case GraphLinqGenesisHash:
+		net = "graphlinq"
 	case RopstenGenesisHash:
 		net = "ropsten"
 	case RinkebyGenesisHash:

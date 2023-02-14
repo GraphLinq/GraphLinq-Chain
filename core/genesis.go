@@ -189,6 +189,8 @@ func CommitGenesisState(db ethdb.Database, triedb *trie.Database, hash common.Ha
 		switch hash {
 		case params.MainnetGenesisHash:
 			genesis = DefaultGenesisBlock()
+		case params.GraphLinqGenesisHash:
+			genesis = DefaultGraphLinqGenesisBlock()
 		case params.RopstenGenesisHash:
 			genesis = DefaultRopstenGenesisBlock()
 		case params.RinkebyGenesisHash:
@@ -423,6 +425,8 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return g.Config
 	case ghash == params.MainnetGenesisHash:
 		return params.MainnetChainConfig
+	case ghash == params.GraphLinqGenesisHash:
+		return params.GraphLinqChainConfig
 	case ghash == params.RopstenGenesisHash:
 		return params.RopstenChainConfig
 	case ghash == params.SepoliaGenesisHash:
@@ -530,6 +534,21 @@ func DefaultGenesisBlock() *Genesis {
 		GasLimit:   5000,
 		Difficulty: big.NewInt(17179869184),
 		Alloc:      decodePrealloc(mainnetAllocData),
+	}
+}
+
+// DefaultGraphLinqGenesisBlock returns the GraphLinq main net genesis block.
+func DefaultGraphLinqGenesisBlock() *Genesis {
+	return &Genesis{
+		Config:     params.GraphLinqChainConfig,
+		ExtraData:  hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000000Bd510d1DD4857061B092420039B44Ca20366F7Fd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   uint64(8000000),
+		Difficulty: big.NewInt(1),
+		Alloc: map[common.Address]GenesisAccount{
+			common.HexToAddress("0xBd510d1DD4857061B092420039B44Ca20366F7Fd"): {Balance: big.NewInt(0).Mul(big.NewInt(6.5e+18), big.NewInt(100000000))}, // 1
+			common.HexToAddress("0x16635Ab2EE39123dBd098f43Aa9b20e1B14441D8"): {Balance: big.NewInt(0).Mul(big.NewInt(1e+18), big.NewInt(100))},         // 2
+			common.HexToAddress("0x7E0605FBb360aC3299dfB4E02D379f8C6af0F276"): {Balance: big.NewInt(0).Mul(big.NewInt(1e+18), big.NewInt(100))},         // 3
+		},
 	}
 }
 

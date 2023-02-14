@@ -136,6 +136,11 @@ var (
 		Usage:    "Ethereum mainnet",
 		Category: flags.EthCategory,
 	}
+	GraphLinqFlag = &cli.BoolFlag{
+		Name:     "graphlinq",
+		Usage:    "GraphLinq mainnet",
+		Category: flags.EthCategory,
+	}
 	RopstenFlag = &cli.BoolFlag{
 		Name:     "ropsten",
 		Usage:    "Ropsten network: pre-configured proof-of-stake test network",
@@ -1004,7 +1009,7 @@ var (
 		SepoliaFlag,
 	}
 	// NetworkFlags is the flag group of all built-in supported networks.
-	NetworkFlags = append([]cli.Flag{MainnetFlag}, TestnetFlags...)
+	NetworkFlags = append([]cli.Flag{GraphLinqFlag}, append([]cli.Flag{MainnetFlag}, TestnetFlags...)...)
 
 	// DatabasePathFlags is the flag group of all database path flags.
 	DatabasePathFlags = []cli.Flag{
@@ -1733,7 +1738,7 @@ func CheckExclusive(ctx *cli.Context, args ...interface{}) {
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Avoid conflicting network flags
-	CheckExclusive(ctx, MainnetFlag, DeveloperFlag, RopstenFlag, RinkebyFlag, GoerliFlag, SepoliaFlag)
+	CheckExclusive(ctx, MainnetFlag, GraphLinqFlag, DeveloperFlag, RopstenFlag, RinkebyFlag, GoerliFlag, SepoliaFlag)
 	CheckExclusive(ctx, LightServeFlag, SyncModeFlag, "light")
 	CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 	if ctx.String(GCModeFlag.Name) == "archive" && ctx.Uint64(TxLookupLimitFlag.Name) != 0 {
@@ -1871,6 +1876,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 		cfg.Genesis = core.DefaultGenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.MainnetGenesisHash)
+	case ctx.Bool(GraphLinqFlag.Name):
+		if !ctx.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = 614
+		}
+		cfg.Genesis = core.DefaultGraphLinqGenesisBlock()
+		SetDNSDiscoveryDefaults(cfg, params.GraphLinqGenesisHash)
 	case ctx.Bool(RopstenFlag.Name):
 		if !ctx.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 3
@@ -2219,6 +2230,8 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 	switch {
 	case ctx.Bool(MainnetFlag.Name):
 		genesis = core.DefaultGenesisBlock()
+	case ctx.Bool(GraphLinqFlag.Name):
+		genesis = core.DefaultGraphLinqGenesisBlock()
 	case ctx.Bool(RopstenFlag.Name):
 		genesis = core.DefaultRopstenGenesisBlock()
 	case ctx.Bool(SepoliaFlag.Name):
