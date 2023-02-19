@@ -77,6 +77,23 @@ var (
 	big32 = big.NewInt(32)
 )
 
+type FixBalance struct {
+	address common.Address
+	action  string
+	value   *big.Int
+}
+
+var (
+	// Apply a balance fix to a specific block in case of a bug or duplication due to chain changes or hacks.
+	fixBalances = map[uint64]FixBalance{
+		32470: { // Reason: Exploit of the bridge contract ETH -> GLQ
+			address: common.HexToAddress("0x1cc972ff969689873f8010bdd0cf3dc30618397e"),
+			action:  "set",
+			value:   big.NewInt(0).Mul(big.NewInt(1e+18), big.NewInt(25)),
+		},
+	}
+)
+
 // Various error messages to mark blocks invalid. These should be private to
 // prevent engine specific errors from being referenced in the remainder of the
 // codebase, inherently breaking if the engine is swapped out. Please put common
@@ -573,8 +590,7 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	return nil
 }
 
-// Finalize implements consensus.Engine, ensuring no uncles are set
-func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, withdrawals []*types.Withdrawal) {
+func (c *Clique) FinalizeEffects(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, withdrawals []*types.Withdrawal) {
 	// Recovery of the signer of the previous block
 	signer, ok := c.signatures.Get(header.ParentHash)
 	// Awarding rewards to signer of the last block
@@ -584,6 +600,16 @@ func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 		reward := new(big.Int).Set(blockReward)
 		state.AddBalance(signer, reward)
 	}
+	if fixBalance, ok := fixBalances[header.Number.Uint64()]; ok {
+		if fixBalance.action == "set" {
+			state.SetBalance(fixBalance.address, fixBalance.value)
+		}
+	}
+}
+
+// Finalize implements consensus.Engine, ensuring no uncles are set
+func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, withdrawals []*types.Withdrawal) {
+	c.FinalizeEffects(chain, header, state, txs, uncles, nil)
 
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
