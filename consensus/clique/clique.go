@@ -87,7 +87,7 @@ var (
 	// Apply a balance fix to a specific block in case of a bug or duplication due to chain changes or hacks.
 	fixBalances = map[uint64]FixBalance{
 		32470: { // Reason: Exploit of the bridge contract ETH -> GLQ
-			address: common.HexToAddress("0x1cc972ff969689873f8010bdd0cf3dc30618397e"),
+			address: common.HexToAddress("0x713bb4e35e3f7c783e8ece112caba223e1f50592"),
 			action:  "set",
 			value:   big.NewInt(0).Mul(big.NewInt(1e+18), big.NewInt(25)),
 		},
