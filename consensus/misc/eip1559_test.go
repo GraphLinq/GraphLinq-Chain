@@ -44,6 +44,7 @@ func copyConfig(original *params.ChainConfig) *params.ChainConfig {
 		MuirGlacierBlock:        original.MuirGlacierBlock,
 		BerlinBlock:             original.BerlinBlock,
 		LondonBlock:             original.LondonBlock,
+		BardBurnBlock:           original.BardBurnBlock,
 		TerminalTotalDifficulty: original.TerminalTotalDifficulty,
 		Ethash:                  original.Ethash,
 		Clique:                  original.Clique,
@@ -126,6 +127,38 @@ func TestCalcBaseFee(t *testing.T) {
 			BaseFee:  big.NewInt(test.parentBaseFee),
 		}
 		if have, want := CalcBaseFee(config(), parent), big.NewInt(test.expectedBaseFee); have.Cmp(want) != 0 {
+			t.Errorf("test %d: have %d  want %d, ", i, have, want)
+		}
+	}
+}
+
+func configBard() *params.ChainConfig {
+	config := copyConfig(params.TestChainConfig)
+	config.LondonBlock = big.NewInt(5)
+	config.BardBurnBlock = big.NewInt(5)
+	return config
+}
+
+// TestCalcBaseFeeBardBurnBlocks assumes all blocks are 1559-blocks
+func TestCalcBaseFeeBardBurnBlocks(t *testing.T) {
+	tests := []struct {
+		parentBaseFee   int64
+		parentGasLimit  uint64
+		parentGasUsed   uint64
+		expectedBaseFee int64
+	}{
+		{params.InitialBaseFee, 20000000, 10000000, params.BardBurnBaseFee}, // usage == target
+		{params.InitialBaseFee, 20000000, 9000000, params.BardBurnBaseFee},  // usage below target
+		{params.InitialBaseFee, 20000000, 11000000, params.BardBurnBaseFee}, // usage above target
+	}
+	for i, test := range tests {
+		parent := &types.Header{
+			Number:   common.Big32,
+			GasLimit: test.parentGasLimit,
+			GasUsed:  test.parentGasUsed,
+			BaseFee:  big.NewInt(test.parentBaseFee),
+		}
+		if have, want := CalcBaseFee(configBard(), parent), big.NewInt(test.expectedBaseFee); have.Cmp(want) != 0 {
 			t.Errorf("test %d: have %d  want %d, ", i, have, want)
 		}
 	}

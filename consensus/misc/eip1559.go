@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // VerifyEip1559Header verifies some header attributes which were changed in EIP-1559,
@@ -53,6 +54,14 @@ func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Heade
 
 // CalcBaseFee calculates the basefee of the header.
 func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
+	
+	log.Info("CalcBaseFee")
+	// If the current block is the in the Bard block range, return the BardBurnBaseFee.
+	if config.IsBardBurn(parent.Number) {
+		log.Info("IsBardBurn")
+		return new(big.Int).SetUint64(params.BardBurnBaseFee)
+	}
+
 	// If the current block is the first EIP-1559 block, return the InitialBaseFee.
 	if !config.IsLondon(parent.Number) {
 		return new(big.Int).SetUint64(params.InitialBaseFee)
