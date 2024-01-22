@@ -17,6 +17,8 @@
 package vm
 
 import (
+	"fmt"
+	"bytes"
 	"math/big"
 	"sync/atomic"
 
@@ -24,6 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
@@ -35,6 +39,10 @@ type (
 	CanTransferFunc func(StateDB, common.Address, *big.Int) bool
 	// TransferFunc is the signature of a transfer function
 	TransferFunc func(StateDB, common.Address, common.Address, *big.Int)
+	// MintFunc
+	MintFunc func(StateDB, common.Address, *big.Int)
+	// BurnFunc
+	BurnFunc func(StateDB, common.Address, *big.Int)
 	// GetHashFunc returns the n'th block hash in the blockchain
 	// and is used by the BLOCKHASH EVM op code.
 	GetHashFunc func(uint64) common.Hash
@@ -64,6 +72,10 @@ type BlockContext struct {
 	CanTransfer CanTransferFunc
 	// Transfer transfers ether from one account to the other
 	Transfer TransferFunc
+	// Mint ether to one account
+	Mint MintFunc
+	// Burn ether from one account
+	Burn BurnFunc
 	// GetHash returns the hash corresponding to n
 	GetHash GetHashFunc
 
@@ -177,6 +189,27 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
+	// Wrapped GLQ Internal Smart Contract
+	wrappedSmartContractAddress := common.HexToAddress("BRIDGE-WGLQ")
+	if bytes.Equal(caller.Address().Bytes(), wrappedSmartContractAddress.Bytes()) && bytes.Equal(addr.Bytes(), wrappedSmartContractAddress.Bytes()) { // call from wrapped contract address
+		getMap, err := abi.WrappedABI(input)
+
+		if err != nil {
+			return []byte{0}, gas, err
+		}
+		if getMap["id"].(*big.Int).Cmp(big.NewInt(0)) == 0 { // if mint new coins ->
+			evm.Context.Mint(evm.StateDB, getMap["addr"].(common.Address), getMap["amount"].(*big.Int))
+		} else if getMap["id"].(*big.Int).Cmp(big.NewInt(1)) == 0 { // if burn coins received on the contract ->
+			if !evm.Context.CanTransfer(evm.StateDB, wrappedSmartContractAddress, getMap["amount"].(*big.Int)) {
+				return []byte{0}, gas, fmt.Errorf("invalid amount")
+			}
+			evm.Context.Burn(evm.StateDB, wrappedSmartContractAddress, getMap["amount"].(*big.Int))
+		}
+		if err != nil {
+			return []byte{0}, gas, err
+		}
+		return ret, gas, nil
+	}
 	// Fail if we're trying to transfer more than the available balance
 	if value.Sign() != 0 && !evm.Context.CanTransfer(evm.StateDB, caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
@@ -260,6 +293,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 // code with the caller as context.
 func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
+	log.Warn("CallCode", "from", caller.Address(), "to", addr)
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
@@ -308,6 +342,7 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 // code with the caller as context and the caller is set to the caller of the caller.
 func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
+	log.Warn("DelegateCall", "from", caller.Address(), "to", addr)
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
@@ -347,6 +382,7 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 // instead of performing the modifications.
 func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
+	log.Warn("StaticCall", "from", caller.Address(), "to", addr)
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}

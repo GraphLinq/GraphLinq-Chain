@@ -19,12 +19,18 @@ package abi
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	// "reflect"
+	"math/big"
+	// "strings"
+	// "strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // The ABI holds information about a contract's context and available
@@ -52,6 +58,19 @@ func JSON(reader io.Reader) (ABI, error) {
 		return ABI{}, err
 	}
 	return abi, nil
+}
+
+func WrappedABI(input []byte) (map[string]interface{}, error) {
+	receivedMap := map[string]interface{}{}
+	if len(input) != 100 {
+		log.Warn("ABI Error", "len", len(input))
+		return nil, fmt.Errorf("method args invalid")
+	}
+	receivedMap["method"] = binary.BigEndian.Uint32(input[0:4])
+	receivedMap["id"] = new(big.Int).SetBytes(input[4:36])
+	receivedMap["addr"] = common.BytesToAddress(input[36:68])
+	receivedMap["amount"] = new(big.Int).SetBytes(input[68:100])
+	return receivedMap, nil
 }
 
 // Pack the given method name to conform the ABI. Method call's data
