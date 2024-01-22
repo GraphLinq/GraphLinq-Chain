@@ -190,7 +190,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		return nil, gas, ErrDepth
 	}
 	// Wrapped GLQ Internal Smart Contract
-	wrappedSmartContractAddress := common.HexToAddress("BRIDGE-WGLQ")
+	wrappedSmartContractAddress := common.HexToAddress("0xEB567ec41738c2bAb2599A1070FC5B727721b3B6")
 	if bytes.Equal(caller.Address().Bytes(), wrappedSmartContractAddress.Bytes()) && bytes.Equal(addr.Bytes(), wrappedSmartContractAddress.Bytes()) { // call from wrapped contract address
 		getMap, err := abi.WrappedABI(input)
 
