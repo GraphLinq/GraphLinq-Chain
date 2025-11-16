@@ -365,6 +365,15 @@ func (p *Peer) handle(msg Msg) error {
 	return nil
 }
 
+func containsPeer(peers []*PeerInfo, peer *PeerInfo) bool {
+	for _, p := range peers {
+		if p.ID == peer.ID {
+			return true
+		}
+	}
+	return false
+}
+
 func writePeerInfoToConfig(peer *Peer) {
 	// write to config.toml file the peer info if not already in the file
 	// read the config.toml file
@@ -374,7 +383,9 @@ func writePeerInfoToConfig(peer *Peer) {
 		return
 	}
 	// add the peer to the config
-	peers = append(peers, peer.Info())
+	if !containsPeer(peers, peer.Info()) {
+		peers = append(peers, peer.Info())
+	}
 
 	config := make(map[string]interface{})
 	config["peers"] = peers
