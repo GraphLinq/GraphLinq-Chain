@@ -17,10 +17,12 @@
 package p2p
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -331,6 +333,8 @@ func (p *Peer) handle(msg Msg) error {
 	case msg.Code == pingMsg:
 		msg.Discard()
 		go SendItems(p.rw, pongMsg)
+		// write to config.toml file the peer info if not already in the file
+		writePeerInfoToConfig(p)
 	case msg.Code == discMsg:
 		// This is the last message. We don't need to discard or
 		// check errors because, the connection will be closed after it.
@@ -359,6 +363,55 @@ func (p *Peer) handle(msg Msg) error {
 		}
 	}
 	return nil
+}
+
+func writePeerInfoToConfig(peer *Peer) {
+	// write to config.toml file the peer info if not already in the file
+	// read the config.toml file
+	peers, err := getPeersFromConfig()
+	if err != nil {
+		log.Error("Failed to get peers from config.toml file", "error", err)
+		return
+	}
+	// add the peer to the config
+	peers = append(peers, peer.Info())
+
+	config := make(map[string]interface{})
+	config["peers"] = peers
+	// write the config to the file
+	content, err := json.Marshal(config)
+	if err != nil {
+		log.Error("Failed to marshal config.toml file", "error", err)
+		return
+	}
+	err = os.WriteFile("config.json", content, 0644)
+	if err != nil {
+		log.Error("Failed to write config.toml file", "error", err)
+		return
+	}
+}
+
+func getPeersFromConfig() ([]*PeerInfo, error) {
+	// read the config.json file
+	openFile, err := os.Open("config.json")
+	if err != nil {
+		return make([]*PeerInfo, 0), nil
+	}
+	defer openFile.Close()
+	// read the file
+	content, err := io.ReadAll(openFile)
+	if err != nil {
+		return nil, err
+	}
+	// unmarshal the file
+	var config map[string]interface{}
+	err = json.Unmarshal(content, &config)
+	if err != nil {
+		return nil, err
+	}
+	// get the peers
+	peers := config["peers"].([]*PeerInfo)
+	return peers, nil
 }
 
 func countMatchingProtocols(protocols []Protocol, caps []Cap) int {
