@@ -18,6 +18,7 @@ package eth
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sync"
@@ -309,6 +310,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 // runEthPeer registers an eth peer into the joint eth/snap peerset, adds it to
 // various subsystems and starts handling messages.
 func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
+	fmt.Println("runEthPeer", peer.ID())
 	// If the peer has a `snap` extension, wait for it to connect so we can have
 	// a uniform initialization/teardown mechanism
 	snap, err := h.peers.waitSnapExtension(peer)
@@ -504,6 +506,7 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 func (h *handler) removePeer(id string) {
 	peer := h.peers.peer(id)
 	if peer != nil {
+		fmt.Println("removePeer", id)
 		peer.Peer.Disconnect(p2p.DiscUselessPeer)
 	}
 }
