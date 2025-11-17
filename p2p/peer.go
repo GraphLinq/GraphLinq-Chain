@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -34,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
-	toml "github.com/pelletier/go-toml/v2"
 )
 
 var (
@@ -334,18 +331,6 @@ func (p *Peer) handle(msg Msg) error {
 	case msg.Code == pingMsg:
 		msg.Discard()
 		go SendItems(p.rw, pongMsg)
-		// get datadir to locate the config.toml file
-
-		// write to config.toml file the peer info if not already in the file
-		peers, err := getConfig("config.toml")
-		if err != nil {
-			log.Error("Failed to get peers from config.toml file", "error", err)
-			return nil
-		}
-		if !containsNode(peers.StaticNodes, p.Node()) {
-			peers.StaticNodes = append(peers.StaticNodes, p.Node())
-		}
-		setPeers("config.toml", peers.StaticNodes, peers.TrustedNodes)
 	case msg.Code == discMsg:
 		// This is the last message. We don't need to discard or
 		// check errors because, the connection will be closed after it.
@@ -372,125 +357,6 @@ func (p *Peer) handle(msg Msg) error {
 		case <-p.closed:
 			return io.EOF
 		}
-	}
-	return nil
-}
-
-type gethToml struct {
-	Node nodeSection `toml:"Node"`
-}
-
-type nodeSection struct {
-	StaticNodes  []string `toml:"StaticNodes"`
-	TrustedNodes []string `toml:"TrustedNodes"`
-}
-
-type configFile struct {
-	// Static nodes are used as pre-configured connections which are always
-	// maintained and re-connected on disconnects.
-	StaticNodes []*enode.Node
-
-	// Trusted nodes are used as pre-configured connections which are always
-	// allowed to connect, even above the peer limit.
-	TrustedNodes []*enode.Node
-}
-
-func containsNode(nodes []*enode.Node, node *enode.Node) bool {
-	for _, n := range nodes {
-		if n.ID() == node.ID() {
-			return true
-		}
-	}
-	return false
-}
-
-func getConfig(configPath string) (*configFile, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		// file does not exist -> start with an empty config
-		if os.IsNotExist(err) {
-			return &configFile{
-				StaticNodes:  make([]*enode.Node, 0),
-				TrustedNodes: make([]*enode.Node, 0),
-			}, nil
-		}
-		// real I/O error
-		return nil, fmt.Errorf("read error: %w", err)
-	}
-
-	var tomlCfg gethToml
-	if err := toml.Unmarshal(data, &tomlCfg); err != nil {
-		// file present but invalid -> start with an empty config
-		return &configFile{
-			StaticNodes:  make([]*enode.Node, 0),
-			TrustedNodes: make([]*enode.Node, 0),
-		}, nil
-	}
-
-	// Parse StaticNodes
-	staticParsed := make([]*enode.Node, 0, len(tomlCfg.Node.StaticNodes))
-	for _, url := range tomlCfg.Node.StaticNodes {
-		n, err := enode.Parse(enode.ValidSchemes, url)
-		if err != nil {
-			return nil, fmt.Errorf("invalid static enode: %s (%w)", url, err)
-		}
-		staticParsed = append(staticParsed, n)
-	}
-
-	// Parse TrustedNodes
-	trustedParsed := make([]*enode.Node, 0, len(tomlCfg.Node.TrustedNodes))
-	for _, url := range tomlCfg.Node.TrustedNodes {
-		n, err := enode.Parse(enode.ValidSchemes, url)
-		if err != nil {
-			return nil, fmt.Errorf("invalid trusted enode: %s (%w)", url, err)
-		}
-		trustedParsed = append(trustedParsed, n)
-	}
-
-	return &configFile{
-		StaticNodes:  staticParsed,
-		TrustedNodes: trustedParsed,
-	}, nil
-}
-
-func setPeers(configPath string, staticNodes []*enode.Node, trustedNodes []*enode.Node) error {
-	var tomlCfg gethToml
-
-	// try to read the file if it exists
-	data, err := os.ReadFile(configPath)
-	if err == nil {
-		// Best effort : if Unmarshal fails, we will start with an empty config
-		_ = toml.Unmarshal(data, &tomlCfg)
-	} else if !os.IsNotExist(err) {
-		// real I/O error (permission, etc.)
-		return fmt.Errorf("read error: %w", err)
-	}
-
-	// overwrite arrays
-	tomlCfg.Node.StaticNodes = make([]string, len(staticNodes))
-	for i, n := range staticNodes {
-		tomlCfg.Node.StaticNodes[i] = n.URLv4()
-	}
-
-	tomlCfg.Node.TrustedNodes = make([]string, len(trustedNodes))
-	for i, n := range trustedNodes {
-		tomlCfg.Node.TrustedNodes[i] = n.URLv4()
-	}
-
-	// marshal back to TOML
-	out, err := toml.Marshal(&tomlCfg)
-	if err != nil {
-		return fmt.Errorf("toml marshal error: %w", err)
-	}
-
-	// ensure that the directory exists
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("mkdir error: %w", err)
-	}
-
-	// write file (create or overwrite)
-	if err := os.WriteFile(configPath, out, 0o644); err != nil {
-		return fmt.Errorf("write error: %w", err)
 	}
 	return nil
 }
