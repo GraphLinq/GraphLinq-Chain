@@ -130,6 +130,8 @@ type handler struct {
 	peerWG    sync.WaitGroup
 
 	dataDir string // Data directory for peer management files
+
+	mutex sync.Mutex
 }
 
 // newHandler returns a handler for all Ethereum chain management protocol.
@@ -150,6 +152,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		requiredBlocks: config.RequiredBlocks,
 		quitSync:       make(chan struct{}),
 		dataDir:        config.DataDir,
+		mutex:          sync.Mutex{},
 	}
 	if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the snap
@@ -722,6 +725,8 @@ func (h *handler) getStaticNodes() []string {
 }
 
 func (h *handler) saveStaticNodes(staticNodes []string) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	configPath := filepath.Join(h.dataDir, "static-nodes.json")
 	data, err := json.Marshal(staticNodes)
 	if err != nil {
