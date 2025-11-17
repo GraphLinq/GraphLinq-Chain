@@ -133,7 +133,20 @@ func New(conf *Config) (*Node, error) {
 	node.server.Config.PrivateKey = node.config.NodeKey()
 	node.server.Config.Name = node.config.NodeName()
 	node.server.Config.Logger = node.log
-	node.config.checkLegacyFiles()
+
+	// Load static and trusted nodes from JSON files if they exist
+	staticNodes := node.config.StaticNodes()
+	if len(staticNodes) > 0 {
+		// Merge with existing static nodes from config
+		node.server.Config.StaticNodes = append(node.server.Config.StaticNodes, staticNodes...)
+	}
+
+	trustedNodes := node.config.TrustedNodes()
+	if len(trustedNodes) > 0 {
+		// Merge with existing trusted nodes from config
+		node.server.Config.TrustedNodes = append(node.server.Config.TrustedNodes, trustedNodes...)
+	}
+
 	if node.server.Config.NodeDatabase == "" {
 		node.server.Config.NodeDatabase = node.config.NodeDB()
 	}

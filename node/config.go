@@ -18,6 +18,7 @@ package node
 
 import (
 	"crypto/ecdsa"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -394,35 +396,72 @@ func (c *Config) NodeKey() *ecdsa.PrivateKey {
 	return key
 }
 
-// CheckLegacyFiles inspects the datadir for signs of legacy static-nodes
-// and trusted-nodes files. If they exist it raises an error.
-func (c *Config) checkLegacyFiles() {
-	c.checkLegacyFile(c.ResolvePath(datadirStaticNodes))
-	c.checkLegacyFile(c.ResolvePath(datadirTrustedNodes))
+// StaticNodes loads static nodes from the configured data directory.
+func (c *Config) StaticNodes() []*enode.Node {
+	return c.loadNodes(c.ResolvePath(datadirStaticNodes))
 }
 
-// checkLegacyFile will only raise an error if a file at the given path exists.
-func (c *Config) checkLegacyFile(path string) {
+// TrustedNodes loads trusted nodes from the configured data directory.
+func (c *Config) TrustedNodes() []*enode.Node {
+	return c.loadNodes(c.ResolvePath(datadirTrustedNodes))
+}
+
+// loadNodes loads nodes from a JSON file.
+func (c *Config) loadNodes(path string) []*enode.Node {
 	// Short circuit if no node config is present
 	if c.DataDir == "" {
-		return
+		return nil
 	}
+
+	// Check if file exists
 	if _, err := os.Stat(path); err != nil {
-		return
+		return nil
 	}
+
+	// Read the file
+	data, err := os.ReadFile(path)
+	if err != nil {
+		logger := c.Logger
+		if logger == nil {
+			logger = log.Root()
+		}
+		logger.Warn("Failed to read node list file", "file", path, "error", err)
+		return nil
+	}
+
+	// Parse JSON
+	var nodeURLs []string
+	if err := json.Unmarshal(data, &nodeURLs); err != nil {
+		logger := c.Logger
+		if logger == nil {
+			logger = log.Root()
+		}
+		logger.Warn("Failed to parse node list file", "file", path, "error", err)
+		return nil
+	}
+
+	// Convert to nodes
+	var nodes []*enode.Node
+	for _, url := range nodeURLs {
+		node, err := enode.ParseV4(url)
+		if err != nil {
+			logger := c.Logger
+			if logger == nil {
+				logger = log.Root()
+			}
+			logger.Warn("Invalid node URL in node list", "file", path, "url", url, "error", err)
+			continue
+		}
+		nodes = append(nodes, node)
+	}
+
 	logger := c.Logger
 	if logger == nil {
 		logger = log.Root()
 	}
-	switch fname := filepath.Base(path); fname {
-	case "static-nodes.json":
-		logger.Error("The static-nodes.json file is deprecated and ignored. Use P2P.StaticNodes in config.toml instead.")
-	case "trusted-nodes.json":
-		logger.Error("The trusted-nodes.json file is deprecated and ignored. Use P2P.TrustedNodes in config.toml instead.")
-	default:
-		// We shouldn't wind up here, but better print something just in case.
-		logger.Error("Ignoring deprecated file.", "file", path)
-	}
+	logger.Info("Loaded nodes from file", "file", filepath.Base(path), "count", len(nodes))
+
+	return nodes
 }
 
 // KeyDirConfig determines the settings for keydirectory
