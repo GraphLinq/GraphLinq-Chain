@@ -17,10 +17,13 @@
 package eth
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -340,6 +344,8 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 	forkID := forkid.NewID(h.chain.Config(), genesis.Hash(), number, head.Time)
 	if err := peer.Handshake(h.networkID, td, hash, genesis.Hash(), forkID, h.forkFilter); err != nil {
 		peer.Log().Debug("Ethereum handshake failed", "err", err)
+		// TODO: remove the peer from the static-nodes.json
+		h.removePeerInStaticNodes(peer)
 		return err
 	}
 	reject := false // reserved peer slots
@@ -360,7 +366,8 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		}
 	}
 	peer.Log().Debug("Ethereum peer connected", "name", peer.Name())
-
+	// TODO: add the peer to the static-nodes.json
+	h.addPeerToStaticNodes(peer)
 	// Register the peer locally
 	if err := h.peers.registerPeer(peer, snap); err != nil {
 		peer.Log().Error("Ethereum peer registration failed", "err", err)
@@ -697,4 +704,58 @@ func (h *handler) txBroadcastLoop() {
 			return
 		}
 	}
+}
+
+func (h *handler) getStaticNodes() []*enode.Node {
+	configPath := filepath.Join(h.dataDir, "static-nodes.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Error("Failed to read static-nodes.json", "error", err)
+		return nil
+	}
+	var staticNodes []*enode.Node
+	err = json.Unmarshal(data, &staticNodes)
+	if err != nil {
+		log.Error("Failed to unmarshal static-nodes.json", "error", err)
+		return []*enode.Node{}
+	}
+	return staticNodes
+}
+
+func (h *handler) saveStaticNodes(staticNodes []*enode.Node) {
+	configPath := filepath.Join(h.dataDir, "static-nodes.json")
+	data, err := json.Marshal(staticNodes)
+	if err != nil {
+		log.Error("Failed to marshal static-nodes.json", "error", err)
+		return
+	}
+	os.WriteFile(configPath, data, 0644)
+}
+
+func (h *handler) removePeerInStaticNodes(peer *eth.Peer) {
+	staticNodes := h.getStaticNodes()
+	newStaticNodes := []*enode.Node{}
+	found := false
+	for _, node := range staticNodes {
+		if node.URLv4() == peer.Node().URLv4() {
+			found = true
+			continue
+		}
+		newStaticNodes = append(newStaticNodes, node)
+	}
+	if !found {
+		return
+	}
+	h.saveStaticNodes(newStaticNodes)
+}
+
+func (h *handler) addPeerToStaticNodes(peer *eth.Peer) {
+	staticNodes := h.getStaticNodes()
+	for _, node := range staticNodes {
+		if node.URLv4() == peer.Node().URLv4() {
+			return
+		}
+	}
+	staticNodes = append(staticNodes, peer.Node())
+	h.saveStaticNodes(staticNodes)
 }
