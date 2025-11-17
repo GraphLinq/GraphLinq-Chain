@@ -164,6 +164,27 @@ It's deprecated, please use "geth db export" instead.
 This command dumps out the state for a given block (or latest, if none provided).
 `,
 	}
+	rollbackCommand = &cli.Command{
+		Action:    rollback,
+		Name:      "rollback",
+		Usage:     "Rollback the blockchain by a specified number of blocks",
+		ArgsUsage: "[number]",
+		Flags: flags.Merge([]cli.Flag{
+			utils.CacheFlag,
+			utils.SyncModeFlag,
+		}, utils.DatabasePathFlags),
+		Description: `
+The rollback command rewinds the blockchain by the specified number of blocks.
+If no number is provided, it defaults to rolling back by 1 block.
+
+Examples:
+  geth rollback           # Rollback by 1 block (default)
+  geth rollback 5         # Rollback by 5 blocks
+
+WARNING: This is a destructive operation. Make sure to backup your data before
+performing a rollback.
+`,
+	}
 )
 
 // initGenesis will initialise the given JSON format genesis file and writes it as
@@ -489,4 +510,62 @@ func dump(ctx *cli.Context) error {
 func hashish(x string) bool {
 	_, err := strconv.Atoi(x)
 	return err != nil
+}
+
+// rollback rewinds the blockchain by the specified number of blocks
+func rollback(ctx *cli.Context) error {
+	stack, _ := makeConfigNode(ctx)
+	defer stack.Close()
+
+	chain, db := utils.MakeChain(ctx, stack, false)
+	defer db.Close()
+
+	currentBlock := chain.CurrentBlock()
+	if currentBlock == nil {
+		utils.Fatalf("No current block found")
+	}
+
+	currentNumber := currentBlock.NumberU64()
+	if currentNumber == 0 {
+		utils.Fatalf("Cannot rollback genesis block")
+	}
+
+	if chain.GetDataDir() == "" {
+		chain.SetDataDir(ctx.String(utils.DataDirFlag.Name))
+	}
+
+	// Parse the number of blocks to rollback (default is 1)
+	blocksToRollback := uint64(1)
+	if ctx.Args().Len() > 0 {
+		var err error
+		blocksToRollback, err = strconv.ParseUint(ctx.Args().First(), 10, 64)
+		if err != nil {
+			utils.Fatalf("Invalid number of blocks: %v", err)
+		}
+	}
+
+	if blocksToRollback == 0 {
+		utils.Fatalf("Number of blocks to rollback must be greater than 0")
+	}
+
+	if blocksToRollback > currentNumber {
+		utils.Fatalf("Cannot rollback %d blocks: current block is #%d (would go before genesis)", blocksToRollback, currentNumber)
+	}
+
+	targetNumber := currentNumber - blocksToRollback
+	log.Warn("Rolling back blockchain", "from", currentNumber, "to", targetNumber, "blocks", blocksToRollback)
+
+	if err := chain.SetHead(targetNumber); err != nil {
+		utils.Fatalf("Rollback failed: %v", err)
+	}
+
+	newBlock := chain.CurrentBlock()
+
+	// Update metadata.json file with the new head block
+	chain.WriteBlockMetadata(newBlock)
+
+	log.Info("Rollback successful", "current_block", newBlock.NumberU64(), "current_hash", newBlock.Hash())
+	fmt.Printf("Successfully rolled back from block #%d to block #%d (%d blocks)\n", currentNumber, newBlock.NumberU64(), blocksToRollback)
+	fmt.Printf("metadata.json updated with new head block #%d\n", newBlock.NumberU64())
+	return nil
 }

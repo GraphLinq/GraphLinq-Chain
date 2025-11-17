@@ -217,6 +217,7 @@ func init() {
 		removedbCommand,
 		dumpCommand,
 		dumpGenesisCommand,
+		rollbackCommand,
 		// See accountcmd.go:
 		accountCommand,
 		walletCommand,

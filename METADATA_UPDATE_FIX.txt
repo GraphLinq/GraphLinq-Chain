@@ -1,0 +1,33 @@
+╔═══════════════════════════════════════════════════════════════╗
+║     FIX: metadata.json est maintenant mis à jour lors       ║
+║                      du rollback !                            ║
+╚═══════════════════════════════════════════════════════════════╝
+
+PROBLÈME ORIGINAL:
+  Après un "geth rollback", le fichier metadata.json gardait 
+  l'ancien numéro de bloc au lieu d'être mis à jour.
+
+SOLUTION:
+  ✓ Ajout de WriteBlockMetadata() dans core/blockchain.go
+  ✓ Appel automatique après chaque rollback
+  ✓ Message de confirmation affiché
+
+FICHIERS MODIFIÉS:
+  • core/blockchain.go       (+6 lignes)
+  • cmd/geth/chaincmd.go     (+2 lignes pour l'appel)
+
+UTILISATION:
+  $ geth rollback 5
+  Successfully rolled back from block #1000 to block #995 (5 blocks)
+  metadata.json updated with new head block #995
+  
+  $ cat ~/.ethereum/metadata.json | jq '.blockNumber'
+  995  ← Correctement mis à jour !
+
+DOCUMENTATION:
+  Voir ROLLBACK_METADATA_UPDATE.md pour plus de détails
+
+═══════════════════════════════════════════════════════════════
+Status: ✅ CORRIGÉ ET TESTÉ
+═══════════════════════════════════════════════════════════════
+

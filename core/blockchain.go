@@ -905,6 +905,20 @@ func (bc *BlockChain) writeBlockMetadata(block *types.Block) {
 	log.Debug("Updated metadata.json", "block", block.NumberU64(), "hash", block.Hash().Hex())
 }
 
+// WriteBlockMetadata is a public wrapper for writeBlockMetadata
+// It allows external packages to update the metadata.json file
+func (bc *BlockChain) WriteBlockMetadata(block *types.Block) {
+	bc.writeBlockMetadata(block)
+}
+
+func (bc *BlockChain) SetDataDir(dataDir string) {
+	bc.dataDir = dataDir
+}
+
+func (bc *BlockChain) GetDataDir() string {
+	return bc.dataDir
+}
+
 func (bc *BlockChain) writeHeadBlock(block *types.Block) {
 	// Add the block to the canonical chain number scheme and mark as the head
 	batch := bc.db.NewBatch()
