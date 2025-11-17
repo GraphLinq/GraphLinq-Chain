@@ -17,12 +17,12 @@
 package p2p
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 var (
@@ -334,7 +335,15 @@ func (p *Peer) handle(msg Msg) error {
 		msg.Discard()
 		go SendItems(p.rw, pongMsg)
 		// write to config.toml file the peer info if not already in the file
-		writePeerInfoToConfig(p)
+		peers, err := getConfig("config.toml")
+		if err != nil {
+			log.Error("Failed to get peers from config.toml file", "error", err)
+			return nil
+		}
+		if !containsNode(peers.StaticNodes, p.Node()) {
+			peers.StaticNodes = append(peers.StaticNodes, p.Node())
+		}
+		setPeers("config.toml", peers.StaticNodes, peers.TrustedNodes)
 	case msg.Code == discMsg:
 		// This is the last message. We don't need to discard or
 		// check errors because, the connection will be closed after it.
@@ -365,64 +374,123 @@ func (p *Peer) handle(msg Msg) error {
 	return nil
 }
 
-func containsPeer(peers []*PeerInfo, peer *PeerInfo) bool {
-	for _, p := range peers {
-		if p.ID == peer.ID {
+type gethToml struct {
+	Node nodeSection `toml:"Node"`
+}
+
+type nodeSection struct {
+	StaticNodes  []string `toml:"StaticNodes"`
+	TrustedNodes []string `toml:"TrustedNodes"`
+}
+
+type configFile struct {
+	// Static nodes are used as pre-configured connections which are always
+	// maintained and re-connected on disconnects.
+	StaticNodes []*enode.Node
+
+	// Trusted nodes are used as pre-configured connections which are always
+	// allowed to connect, even above the peer limit.
+	TrustedNodes []*enode.Node
+}
+
+func containsNode(nodes []*enode.Node, node *enode.Node) bool {
+	for _, n := range nodes {
+		if n.ID() == node.ID() {
 			return true
 		}
 	}
 	return false
 }
 
-func writePeerInfoToConfig(peer *Peer) {
-	// write to config.toml file the peer info if not already in the file
-	// read the config.toml file
-	peers, err := getPeersFromConfig()
+func getConfig(configPath string) (*configFile, error) {
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Error("Failed to get peers from config.toml file", "error", err)
-		return
-	}
-	// add the peer to the config
-	if !containsPeer(peers, peer.Info()) {
-		peers = append(peers, peer.Info())
+		// file does not exist -> start with an empty config
+		if os.IsNotExist(err) {
+			return &configFile{
+				StaticNodes:  make([]*enode.Node, 0),
+				TrustedNodes: make([]*enode.Node, 0),
+			}, nil
+		}
+		// real I/O error
+		return nil, fmt.Errorf("read error: %w", err)
 	}
 
-	config := make(map[string]interface{})
-	config["peers"] = peers
-	// write the config to the file
-	content, err := json.Marshal(config)
-	if err != nil {
-		log.Error("Failed to marshal config.toml file", "error", err)
-		return
+	var tomlCfg gethToml
+	if err := toml.Unmarshal(data, &tomlCfg); err != nil {
+		// file present but invalid -> start with an empty config
+		return &configFile{
+			StaticNodes:  make([]*enode.Node, 0),
+			TrustedNodes: make([]*enode.Node, 0),
+		}, nil
 	}
-	err = os.WriteFile("config.json", content, 0644)
-	if err != nil {
-		log.Error("Failed to write config.toml file", "error", err)
-		return
+
+	// Parse StaticNodes
+	staticParsed := make([]*enode.Node, 0, len(tomlCfg.Node.StaticNodes))
+	for _, url := range tomlCfg.Node.StaticNodes {
+		n, err := enode.Parse(enode.ValidSchemes, url)
+		if err != nil {
+			return nil, fmt.Errorf("invalid static enode: %s (%w)", url, err)
+		}
+		staticParsed = append(staticParsed, n)
 	}
+
+	// Parse TrustedNodes
+	trustedParsed := make([]*enode.Node, 0, len(tomlCfg.Node.TrustedNodes))
+	for _, url := range tomlCfg.Node.TrustedNodes {
+		n, err := enode.Parse(enode.ValidSchemes, url)
+		if err != nil {
+			return nil, fmt.Errorf("invalid trusted enode: %s (%w)", url, err)
+		}
+		trustedParsed = append(trustedParsed, n)
+	}
+
+	return &configFile{
+		StaticNodes:  staticParsed,
+		TrustedNodes: trustedParsed,
+	}, nil
 }
 
-func getPeersFromConfig() ([]*PeerInfo, error) {
-	// read the config.json file
-	openFile, err := os.Open("config.json")
-	if err != nil {
-		return make([]*PeerInfo, 0), nil
+func setPeers(configPath string, staticNodes []*enode.Node, trustedNodes []*enode.Node) error {
+	var tomlCfg gethToml
+
+	// try to read the file if it exists
+	data, err := os.ReadFile(configPath)
+	if err == nil {
+		// Best effort : if Unmarshal fails, we will start with an empty config
+		_ = toml.Unmarshal(data, &tomlCfg)
+	} else if !os.IsNotExist(err) {
+		// real I/O error (permission, etc.)
+		return fmt.Errorf("read error: %w", err)
 	}
-	defer openFile.Close()
-	// read the file
-	content, err := io.ReadAll(openFile)
-	if err != nil {
-		return nil, err
+
+	// overwrite arrays
+	tomlCfg.Node.StaticNodes = make([]string, len(staticNodes))
+	for i, n := range staticNodes {
+		tomlCfg.Node.StaticNodes[i] = n.URLv4()
 	}
-	// unmarshal the file
-	var config map[string]interface{}
-	err = json.Unmarshal(content, &config)
-	if err != nil {
-		return nil, err
+
+	tomlCfg.Node.TrustedNodes = make([]string, len(trustedNodes))
+	for i, n := range trustedNodes {
+		tomlCfg.Node.TrustedNodes[i] = n.URLv4()
 	}
-	// get the peers
-	peers := config["peers"].([]*PeerInfo)
-	return peers, nil
+
+	// marshal back to TOML
+	out, err := toml.Marshal(&tomlCfg)
+	if err != nil {
+		return fmt.Errorf("toml marshal error: %w", err)
+	}
+
+	// ensure that the directory exists
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return fmt.Errorf("mkdir error: %w", err)
+	}
+
+	// write file (create or overwrite)
+	if err := os.WriteFile(configPath, out, 0o644); err != nil {
+		return fmt.Errorf("write error: %w", err)
+	}
+	return nil
 }
 
 func countMatchingProtocols(protocols []Protocol, caps []Cap) int {

@@ -1,6 +1,8 @@
 module github.com/ethereum/go-ethereum
 
-go 1.18
+go 1.21.0
+
+toolchain go1.23.3
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
@@ -46,6 +48,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/peterh/liner v1.1.1-0.20190123174540-a2c9a5303de7
 	github.com/prometheus/tsdb v0.7.1
 	github.com/rs/cors v1.7.0
