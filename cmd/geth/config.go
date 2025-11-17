@@ -131,7 +131,8 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	// Load config file.
 	if file := ctx.String(configFileFlag.Name); file != "" {
 		if err := loadConfig(file, &cfg); err != nil {
-			utils.Fatalf("%v", err)
+			//utils.Fatalf("%v", err)
+			log.Error("Failed to load config file", "error", err)
 		}
 	}
 
