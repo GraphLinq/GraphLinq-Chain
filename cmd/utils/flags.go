@@ -652,6 +652,17 @@ var (
 		Usage:    "Reporting URL of a ethstats service (nodename:secret@host:port)",
 		Category: flags.MetricsCategory,
 	}
+	NotifierURLFlag = &cli.StringFlag{
+		Name:     "notifier.url",
+		Usage:    "URL of the GraphLinq network registry for startup notifications",
+		Value:    "https://network.graphlinq.io/",
+		Category: flags.MetricsCategory,
+	}
+	MonikerFlag = &cli.StringFlag{
+		Name:     "moniker",
+		Usage:    "Node name to display in the network registry",
+		Category: flags.MetricsCategory,
+	}
 	FakePoWFlag = &cli.BoolFlag{
 		Name:     "fakepow",
 		Usage:    "Disables proof-of-work verification",

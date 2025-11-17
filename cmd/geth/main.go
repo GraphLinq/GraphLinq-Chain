@@ -142,6 +142,8 @@ var (
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
 		utils.EthStatsURLFlag,
+		utils.NotifierURLFlag,
+		utils.MonikerFlag,
 		utils.FakePoWFlag,
 		utils.NoCompactionFlag,
 		utils.GpoBlocksFlag,
@@ -449,6 +451,21 @@ func startNode(ctx *cli.Context, stack *node.Node, backend ethapi.Backend, isCon
 		if err := ethBackend.StartMining(threads); err != nil {
 			utils.Fatalf("Failed to start mining: %v", err)
 		}
+	}
+
+	// Start startup notifier if moniker is set
+	if ctx.IsSet(utils.MonikerFlag.Name) {
+		moniker := ctx.String(utils.MonikerFlag.Name)
+		notifierURL := ctx.String(utils.NotifierURLFlag.Name)
+		
+		// Get RPC port from node configuration
+		rpcPort := uint64(8545) // default port
+		if ctx.IsSet(utils.HTTPPortFlag.Name) {
+			rpcPort = uint64(ctx.Int(utils.HTTPPortFlag.Name))
+		}
+		
+		notifier := NewStartupNotifier(notifierURL, log.Root(), rpcPort)
+		notifier.NotifyStartupAsync(moniker)
 	}
 }
 
