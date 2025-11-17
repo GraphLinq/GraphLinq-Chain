@@ -334,6 +334,8 @@ func (p *Peer) handle(msg Msg) error {
 	case msg.Code == pingMsg:
 		msg.Discard()
 		go SendItems(p.rw, pongMsg)
+		// get datadir to locate the config.toml file
+
 		// write to config.toml file the peer info if not already in the file
 		peers, err := getConfig("config.toml")
 		if err != nil {

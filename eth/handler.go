@@ -88,6 +88,7 @@ type handlerConfig struct {
 	EventMux       *event.TypeMux            // Legacy event mux, deprecate for `feed`
 	Checkpoint     *params.TrustedCheckpoint // Hard coded checkpoint for sync challenges
 	RequiredBlocks map[uint64]common.Hash    // Hard coded map of required block hashes for sync challenges
+	DataDir        string                    // Data directory for peer management files
 }
 
 type handler struct {
@@ -124,6 +125,8 @@ type handler struct {
 	chainSync *chainSyncer
 	wg        sync.WaitGroup
 	peerWG    sync.WaitGroup
+
+	dataDir string // Data directory for peer management files
 }
 
 // newHandler returns a handler for all Ethereum chain management protocol.
@@ -143,6 +146,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		merger:         config.Merger,
 		requiredBlocks: config.RequiredBlocks,
 		quitSync:       make(chan struct{}),
+		dataDir:        config.DataDir,
 	}
 	if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the snap
@@ -310,7 +314,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 // runEthPeer registers an eth peer into the joint eth/snap peerset, adds it to
 // various subsystems and starts handling messages.
 func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
-	fmt.Println("runEthPeer", peer.ID())
+	fmt.Println("runEthPeer", peer.Node().URLv4(), "datadir:", h.dataDir)
 	// If the peer has a `snap` extension, wait for it to connect so we can have
 	// a uniform initialization/teardown mechanism
 	snap, err := h.peers.waitSnapExtension(peer)
@@ -506,14 +510,15 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 func (h *handler) removePeer(id string) {
 	peer := h.peers.peer(id)
 	if peer != nil {
-		fmt.Println("removePeer", id)
+		fmt.Println("removePeer", peer.Node().URLv4(), "datadir:", h.dataDir)
+		// TODO: Implement peer management file operations here
+		// You can now use h.dataDir to read/write peer information
 		peer.Peer.Disconnect(p2p.DiscUselessPeer)
 	}
 }
 
 // unregisterPeer removes a peer from the downloader, fetchers and main peer set.
 func (h *handler) unregisterPeer(id string) {
-	fmt.Println("unregisterPeer", id)
 	// Create a custom logger to avoid printing the entire id
 	var logger log.Logger
 	if len(id) < 16 {
@@ -528,6 +533,7 @@ func (h *handler) unregisterPeer(id string) {
 		logger.Error("Ethereum peer removal failed", "err", errPeerNotRegistered)
 		return
 	}
+	fmt.Println("unregisterPeer", peer.Node().URLv4(), "datadir:", h.dataDir)
 	// Remove the `eth` peer if it exists
 	logger.Debug("Removing Ethereum peer", "snap", peer.snapExt != nil)
 
