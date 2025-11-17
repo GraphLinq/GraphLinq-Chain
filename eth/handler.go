@@ -42,7 +42,6 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -706,23 +705,23 @@ func (h *handler) txBroadcastLoop() {
 	}
 }
 
-func (h *handler) getStaticNodes() []*enode.Node {
+func (h *handler) getStaticNodes() []string {
 	configPath := filepath.Join(h.dataDir, "static-nodes.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		log.Error("Failed to read static-nodes.json", "error", err)
 		return nil
 	}
-	var staticNodes []*enode.Node
+	var staticNodes []string
 	err = json.Unmarshal(data, &staticNodes)
 	if err != nil {
 		log.Error("Failed to unmarshal static-nodes.json", "error", err)
-		return []*enode.Node{}
+		return []string{}
 	}
 	return staticNodes
 }
 
-func (h *handler) saveStaticNodes(staticNodes []*enode.Node) {
+func (h *handler) saveStaticNodes(staticNodes []string) {
 	configPath := filepath.Join(h.dataDir, "static-nodes.json")
 	data, err := json.Marshal(staticNodes)
 	if err != nil {
@@ -734,14 +733,14 @@ func (h *handler) saveStaticNodes(staticNodes []*enode.Node) {
 
 func (h *handler) removePeerInStaticNodes(peer *eth.Peer) {
 	staticNodes := h.getStaticNodes()
-	newStaticNodes := []*enode.Node{}
+	newStaticNodes := []string{}
 	found := false
-	for _, node := range staticNodes {
-		if node.URLv4() == peer.Node().URLv4() {
+	for _, url := range staticNodes {
+		if url == peer.Node().URLv4() {
 			found = true
 			continue
 		}
-		newStaticNodes = append(newStaticNodes, node)
+		newStaticNodes = append(newStaticNodes, url)
 	}
 	if !found {
 		return
@@ -751,11 +750,11 @@ func (h *handler) removePeerInStaticNodes(peer *eth.Peer) {
 
 func (h *handler) addPeerToStaticNodes(peer *eth.Peer) {
 	staticNodes := h.getStaticNodes()
-	for _, node := range staticNodes {
-		if node.URLv4() == peer.Node().URLv4() {
+	for _, url := range staticNodes {
+		if url == peer.Node().URLv4() {
 			return
 		}
 	}
-	staticNodes = append(staticNodes, peer.Node())
+	staticNodes = append(staticNodes, peer.Node().URLv4())
 	h.saveStaticNodes(staticNodes)
 }
