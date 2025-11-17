@@ -18,10 +18,13 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math/big"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -215,6 +218,7 @@ type BlockChain struct {
 
 	wg            sync.WaitGroup //
 	quit          chan struct{}  // shutdown signal, closed in Stop.
+	dataDir       string         // Data directory for metadata files
 	running       int32          // 0 if chain is running, 1 when stopped
 	procInterrupt int32          // interrupt signaler for block processing
 
@@ -229,7 +233,7 @@ type BlockChain struct {
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator
 // and Processor.
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, dataDir string) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = defaultCacheConfig
 	}
@@ -272,6 +276,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		futureBlocks:  lru.NewCache[common.Hash, *types.Block](maxFutureBlocks),
 		engine:        engine,
 		vmConfig:      vmConfig,
+		dataDir:       dataDir,
 	}
 	bc.forker = NewForkChoice(bc, shouldPreserve)
 	bc.stateCache = state.NewDatabaseWithNodeDB(bc.db, bc.triedb)
@@ -867,6 +872,39 @@ func (bc *BlockChain) ExportN(w io.Writer, first uint64, last uint64) error {
 // or if they are on a different side chain.
 //
 // Note, this function assumes that the `mu` mutex is held!
+// writeBlockMetadata writes the current block metadata to a JSON file
+func (bc *BlockChain) writeBlockMetadata(block *types.Block) {
+	if bc.dataDir == "" {
+		return
+	}
+
+	metadata := map[string]interface{}{
+		"blockNumber": block.NumberU64(),
+		"blockHash":   block.Hash().Hex(),
+		"parentHash":  block.ParentHash().Hex(),
+		"timestamp":   block.Time(),
+		"gasUsed":     block.GasUsed(),
+		"gasLimit":    block.GasLimit(),
+		"difficulty":  block.Difficulty().String(),
+		"miner":       block.Coinbase().Hex(),
+		"txCount":     len(block.Transactions()),
+	}
+
+	metadataPath := filepath.Join(bc.dataDir, "metadata.json")
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		log.Error("Failed to marshal metadata", "error", err)
+		return
+	}
+
+	if err := os.WriteFile(metadataPath, data, 0644); err != nil {
+		log.Error("Failed to write metadata.json", "error", err, "path", metadataPath)
+		return
+	}
+
+	log.Debug("Updated metadata.json", "block", block.NumberU64(), "hash", block.Hash().Hex())
+}
+
 func (bc *BlockChain) writeHeadBlock(block *types.Block) {
 	// Add the block to the canonical chain number scheme and mark as the head
 	batch := bc.db.NewBatch()
@@ -888,6 +926,9 @@ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
 
 	bc.currentBlock.Store(block)
 	headBlockGauge.Update(int64(block.NumberU64()))
+
+	// Write metadata.json file
+	bc.writeBlockMetadata(block)
 }
 
 // stop stops the blockchain service. If any imports are currently in progress

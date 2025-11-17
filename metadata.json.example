@@ -1,0 +1,12 @@
+{
+  "blockNumber": 18534567,
+  "blockHash": "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "parentHash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef123456789a",
+  "timestamp": 1699876543,
+  "gasUsed": 12345678,
+  "gasLimit": 30000000,
+  "difficulty": "12345678901234567890",
+  "miner": "0x1234567890abcdef1234567890abcdef12345678",
+  "txCount": 150
+}
+

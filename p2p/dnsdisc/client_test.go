@@ -22,6 +22,7 @@ import (
 	"errors"
 	"math/rand"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,25 +42,27 @@ const (
 )
 
 func TestClientSyncTree(t *testing.T) {
-	r := mapResolver{
-		"n":                            "enrtree-root:v1 e=JWXYDBPXYWG6FX3GMDIBFA6CJ4 l=C7HRFPF3BLGF3YR4DY5KX3SMBE seq=1 sig=o908WmNp7LibOfPsr4btQwatZJ5URBr2ZAuxvK4UWHlsB9sUOTJQaGAlLPVAhM__XJesCHxLISo94z5Z2a463gA",
-		"C7HRFPF3BLGF3YR4DY5KX3SMBE.n": "enrtree://AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org",
-		"JWXYDBPXYWG6FX3GMDIBFA6CJ4.n": "enrtree-branch:2XS2367YHAXJFGLZHVAWLQD4ZY,H4FHT4B454P6UXFD7JCYQ5PWDY,MHTDO6TMUBRIA2XWG5LUDACK24",
-		"2XS2367YHAXJFGLZHVAWLQD4ZY.n": "enr:-HW4QOFzoVLaFJnNhbgMoDXPnOvcdVuj7pDpqRvh6BRDO68aVi5ZcjB3vzQRZH2IcLBGHzo8uUN3snqmgTiE56CH3AMBgmlkgnY0iXNlY3AyNTZrMaECC2_24YYkYHEgdzxlSNKQEnHhuNAbNlMlWJxrJxbAFvA",
-		"H4FHT4B454P6UXFD7JCYQ5PWDY.n": "enr:-HW4QAggRauloj2SDLtIHN1XBkvhFZ1vtf1raYQp9TBW2RD5EEawDzbtSmlXUfnaHcvwOizhVYLtr7e6vw7NAf6mTuoCgmlkgnY0iXNlY3AyNTZrMaECjrXI8TLNXU0f8cthpAMxEshUyQlK-AM0PW2wfrnacNI",
-		"MHTDO6TMUBRIA2XWG5LUDACK24.n": "enr:-HW4QLAYqmrwllBEnzWWs7I5Ev2IAs7x_dZlbYdRdMUx5EyKHDXp7AV5CkuPGUPdvbv1_Ms1CPfhcGCvSElSosZmyoqAgmlkgnY0iXNlY3AyNTZrMaECriawHKWdDRk2xeZkrOXBQ0dfMFLHY4eENZwdufn1S1o",
-	}
-	var (
-		wantNodes = testNodes(0x29452, 3)
-		wantLinks = []string{"enrtree://AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org"}
-		wantSeq   = uint(1)
-	)
+	// Generate test nodes and tree
+	nodes := testNodes(0x29452, 3)
+	links := []string{"enrtree://AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org"}
+	tree, url := makeTestTree("n", nodes, links)
 
+	// Expected values
+	wantNodes := nodes
+	wantLinks := links
+	wantSeq := uint(1)
+
+	// Create resolver and client
+	r := mapResolver(tree.ToTXT("n"))
 	c := NewClient(Config{Resolver: r, Logger: testlog.Logger(t, log.LvlTrace)})
-	stree, err := c.SyncTree("enrtree://AKPYQIUQIL7PSIACI32J7FGZW56E5FKHEFCCOFHILBIMW3M6LWXS2@n")
+
+	// Sync the tree
+	stree, err := c.SyncTree(url)
 	if err != nil {
 		t.Fatal("sync error:", err)
 	}
+
+	// Verify results
 	if !reflect.DeepEqual(sortByID(stree.Nodes()), sortByID(wantNodes)) {
 		t.Errorf("wrong nodes in synced tree:\nhave %v\nwant %v", spew.Sdump(stree.Nodes()), spew.Sdump(wantNodes))
 	}
@@ -243,7 +246,30 @@ func TestIteratorRootRecheckOnFail(t *testing.T) {
 	resolver.add(tree2.ToTXT("n"))
 	t.Log("tree updated")
 
-	checkIterator(t, it, nodes)
+	// Run checkIterator in a goroutine and advance the clock as needed.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		checkIterator(t, it, nodes)
+	}()
+
+	// Advance the clock periodically to allow any slowdown timers to fire.
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			// Advance clock by a small amount to process any pending timers.
+			// The slowdown delays are 5s or 10s, so advancing by 15s should be enough.
+			clock.Run(15 * time.Second)
+		case <-timeout:
+			t.Fatal("test timeout: checkIterator did not complete")
+		}
+	}
 }
 
 // This test checks that the iterator works correctly when the tree is initially empty.
@@ -391,8 +417,22 @@ func makeTestTree(domain string, nodes []*enode.Node, links []string) (*Tree, st
 	return tree, url
 }
 
+var (
+	testKeyCacheMu sync.Mutex
+	testKeyCache   = make(map[int64][]*ecdsa.PrivateKey)
+)
+
 // testKeys creates deterministic private keys for testing.
 func testKeys(seed int64, n int) []*ecdsa.PrivateKey {
+	testKeyCacheMu.Lock()
+	defer testKeyCacheMu.Unlock()
+
+	// Check cache first
+	if keys, ok := testKeyCache[seed]; ok && len(keys) >= n {
+		return keys[:n]
+	}
+
+	// Generate keys deterministically
 	rand := rand.New(rand.NewSource(seed))
 	keys := make([]*ecdsa.PrivateKey, n)
 	for i := 0; i < n; i++ {
@@ -402,6 +442,9 @@ func testKeys(seed int64, n int) []*ecdsa.PrivateKey {
 		}
 		keys[i] = key
 	}
+
+	// Cache the generated keys
+	testKeyCache[seed] = keys
 	return keys
 }
 
