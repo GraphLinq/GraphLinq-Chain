@@ -17,6 +17,7 @@
 package ethapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -24,7 +25,6 @@ import (
 	"math/big"
 	"strings"
 	"time"
-	"bytes"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
@@ -396,12 +396,14 @@ func (s *PersonalAccountAPI) ImportRawKey(privkey string, password string) (comm
 // UnlockAccount will unlock the account associated with the given address with
 // the given password for duration seconds. If duration is nil it will use a
 // default of 300 seconds. It returns an indication if the account was unlocked.
+//
+// NOTE: This method is DISABLED via RPC for security reasons.
+// Accounts can only be unlocked at node startup using the --unlock flag.
 func (s *PersonalAccountAPI) UnlockAccount(ctx context.Context, addr common.Address, password string, duration *uint64) (bool, error) {
-	// When the API is exposed by external RPC(http, ws etc), unless the user
-	// explicitly specifies to allow the insecure account unlocking, otherwise
-	// it is disabled.
-	if s.b.ExtRPCEnabled() && !s.b.AccountManager().Config().InsecureUnlockAllowed {
-		return false, errors.New("account unlock with HTTP access is forbidden")
+	// Unlocking accounts via RPC is disabled for security reasons.
+	// Accounts must be unlocked at startup using the --unlock command line flag.
+	if s.b.ExtRPCEnabled() {
+		return false, errors.New("account unlock via RPC is disabled for security - use --unlock flag at startup instead")
 	}
 
 	const max = uint64(time.Duration(math.MaxInt64) / time.Second)
@@ -639,11 +641,11 @@ func (s *BlockChainAPI) GetBalance(ctx context.Context, address common.Address, 
 }
 
 type ERC20Result struct {
-	Address      common.Address  `json:"address"`
-	Name         string          `json:"name"`
-	Symbol       string          `json:"symbol"`
-	TotalSupply  *hexutil.Big    `json:"totalSupply"`
-	Decimals     uint8           `json:"decimals"`
+	Address     common.Address `json:"address"`
+	Name        string         `json:"name"`
+	Symbol      string         `json:"symbol"`
+	TotalSupply *hexutil.Big   `json:"totalSupply"`
+	Decimals    uint8          `json:"decimals"`
 }
 
 func newRPCBytes(bytes []byte) *hexutil.Bytes {
@@ -758,11 +760,11 @@ func (s *BlockChainAPI) GetERC20Informations(ctx context.Context, address common
 	decimals.SetString(strings.TrimPrefix(hexutil.Encode(result), "0x"), 16)
 
 	return &ERC20Result{
-		Address:      address,
-		Name:         name,
-		Symbol:       symbol,
-		TotalSupply:  (*hexutil.Big)(totalSupply),
-		Decimals:     uint8(decimals.Uint64()),
+		Address:     address,
+		Name:        name,
+		Symbol:      symbol,
+		TotalSupply: (*hexutil.Big)(totalSupply),
+		Decimals:    uint8(decimals.Uint64()),
 	}, nil
 }
 
@@ -772,7 +774,7 @@ func (s *BlockChainAPI) GetContractType(ctx context.Context, address common.Addr
 	if state == nil || err != nil {
 		return "", err
 	}
-	code := state.GetCode(address);
+	code := state.GetCode(address)
 	if len(code) == 0 {
 		return "", state.Error()
 	}
@@ -788,11 +790,11 @@ func (s *BlockChainAPI) GetContractType(ctx context.Context, address common.Addr
 func isERC20Contract(code []byte) bool {
 	// Signatures des fonctions ERC20
 	signatures := map[string][]byte{
-		"totalSupply": []byte{0x18, 0x16, 0x0d, 0xdd},
-		"balanceOf":   []byte{0x70, 0xa0, 0x82, 0x31},
-		"transfer":    []byte{0xa9, 0x05, 0x9c, 0xbb},
-		"approve":     []byte{0x09, 0x5e, 0xa7, 0xb3},
-		"allowance":   []byte{0xdd, 0x62, 0xed, 0x3e},
+		"totalSupply":  []byte{0x18, 0x16, 0x0d, 0xdd},
+		"balanceOf":    []byte{0x70, 0xa0, 0x82, 0x31},
+		"transfer":     []byte{0xa9, 0x05, 0x9c, 0xbb},
+		"approve":      []byte{0x09, 0x5e, 0xa7, 0xb3},
+		"allowance":    []byte{0xdd, 0x62, 0xed, 0x3e},
 		"transferFrom": []byte{0x23, 0xb8, 0x72, 0xdd},
 	}
 

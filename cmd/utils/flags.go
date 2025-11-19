@@ -591,7 +591,7 @@ var (
 	}
 	InsecureUnlockAllowedFlag = &cli.BoolFlag{
 		Name:     "allow-insecure-unlock",
-		Usage:    "Allow insecure account unlocking when account-related RPCs are exposed by http",
+		Usage:    "Allow insecure account unlocking when account-related RPCs are exposed by http (deprecated: personal.unlockAccount is now always disabled via RPC)",
 		Category: flags.AccountCategory,
 	}
 

@@ -80,3 +80,6 @@ cat ~/.ethereum/metadata.json | jq '.'
 - Le fichier est écrit de manière atomique pour éviter les corruptions
 - Les erreurs d'écriture sont loguées mais ne bloquent pas le fonctionnement de la blockchain
 
+
+
+

@@ -457,13 +457,13 @@ func startNode(ctx *cli.Context, stack *node.Node, backend ethapi.Backend, isCon
 	if ctx.IsSet(utils.MonikerFlag.Name) {
 		moniker := ctx.String(utils.MonikerFlag.Name)
 		notifierURL := ctx.String(utils.NotifierURLFlag.Name)
-		
+
 		// Get RPC port from node configuration
 		rpcPort := uint64(8545) // default port
 		if ctx.IsSet(utils.HTTPPortFlag.Name) {
 			rpcPort = uint64(ctx.Int(utils.HTTPPortFlag.Name))
 		}
-		
+
 		notifier := NewStartupNotifier(notifierURL, log.Root(), rpcPort)
 		notifier.NotifyStartupAsync(moniker)
 	}
@@ -482,11 +482,8 @@ func unlockAccounts(ctx *cli.Context, stack *node.Node) {
 	if len(unlocks) == 0 {
 		return
 	}
-	// If insecure account unlocking is not allowed if node's APIs are exposed to external.
-	// Print warning log to user and skip unlocking.
-	if !stack.Config().InsecureUnlockAllowed && stack.Config().ExtRPCEnabled() {
-		utils.Fatalf("Account unlock with HTTP access is forbidden!")
-	}
+	// Accounts can only be unlocked at startup via --unlock flag.
+	// The personal.unlockAccount RPC method is disabled for security reasons.
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
 	passwords := utils.MakePasswordList(ctx)
 	for i, account := range unlocks {

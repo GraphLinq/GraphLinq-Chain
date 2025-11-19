@@ -159,3 +159,6 @@ watch -n 1 "cat ~/.ethereum/metadata.json | jq '.blockNumber'"
 - ✅ Fonctionne avec tous les modes de synchronisation (full, fast, snap)
 - ✅ Compatible avec tous les consensus engines (PoW, PoS, Clique)
 
+
+
+

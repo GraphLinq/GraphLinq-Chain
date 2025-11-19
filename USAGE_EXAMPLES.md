@@ -316,3 +316,6 @@ if __name__ == '__main__':
 4. **Erreurs**: Si le fichier n'existe pas, vérifiez que le nœud est démarré et que le dataDir est configuré
 5. **Permissions**: Le fichier est créé avec les permissions 0644 (lecture pour tous)
 
+
+
+
