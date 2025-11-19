@@ -1921,34 +1921,10 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 
 // eth_sendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
+//
+// NOTE: This method is DISABLED for security reasons. Use eth_sendRawTransaction with client-side signing instead.
 func (s *TransactionAPI) SendTransaction(ctx context.Context, args TransactionArgs) (common.Hash, error) {
-	// Look up the wallet containing the requested signer
-	account := accounts.Account{Address: args.from()}
-
-	wallet, err := s.b.AccountManager().Find(account)
-	if err != nil {
-		return common.Hash{}, err
-	}
-
-	if args.Nonce == nil {
-		// Hold the mutex around signing to prevent concurrent assignment of
-		// the same nonce to multiple accounts.
-		s.nonceLock.LockAddr(args.from())
-		defer s.nonceLock.UnlockAddr(args.from())
-	}
-
-	// Set some sanity defaults and terminate on failure
-	if err := args.setDefaults(ctx, s.b); err != nil {
-		return common.Hash{}, err
-	}
-	// Assemble the transaction and sign with the wallet
-	tx := args.toTransaction()
-
-	signed, err := wallet.SignTx(account, tx, s.b.ChainConfig().ChainID)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return SubmitTransaction(ctx, s.b, signed)
+	return common.Hash{}, errors.New("eth_sendTransaction has been disabled for security reasons - use eth_sendRawTransaction with client-side signing (e.g., MetaMask, hardware wallets) instead")
 }
 
 // eth_fillTransaction fills the defaults (nonce, gas, gasPrice or 1559 fields)
@@ -1986,21 +1962,11 @@ func (s *TransactionAPI) SendRawTransaction(ctx context.Context, input hexutil.B
 //
 // The account associated with addr must be unlocked.
 //
+// NOTE: This method is DISABLED for security reasons. Use client-side signing instead.
+//
 // https://github.com/ethereum/wiki/wiki/JSON-RPC#eth_sign
 func (s *TransactionAPI) Sign(addr common.Address, data hexutil.Bytes) (hexutil.Bytes, error) {
-	// Look up the wallet containing the requested signer
-	account := accounts.Account{Address: addr}
-
-	wallet, err := s.b.AccountManager().Find(account)
-	if err != nil {
-		return nil, err
-	}
-	// Sign the requested hash with the wallet
-	signature, err := wallet.SignText(account, data)
-	if err == nil {
-		signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
-	}
-	return signature, err
+	return nil, errors.New("eth_sign has been disabled for security reasons - use client-side signing (e.g., MetaMask, hardware wallets) instead")
 }
 
 // SignTransactionResult represents a RLP encoded signed transaction.
@@ -2012,33 +1978,10 @@ type SignTransactionResult struct {
 // eth_signTransaction will sign the given transaction with the from account.
 // The node needs to have the private key of the account corresponding with
 // the given from address and it needs to be unlocked.
+//
+// NOTE: This method is DISABLED for security reasons. Use client-side signing instead.
 func (s *TransactionAPI) SignTransaction(ctx context.Context, args TransactionArgs) (*SignTransactionResult, error) {
-	if args.Gas == nil {
-		return nil, fmt.Errorf("gas not specified")
-	}
-	if args.GasPrice == nil && (args.MaxPriorityFeePerGas == nil || args.MaxFeePerGas == nil) {
-		return nil, fmt.Errorf("missing gasPrice or maxFeePerGas/maxPriorityFeePerGas")
-	}
-	if args.Nonce == nil {
-		return nil, fmt.Errorf("nonce not specified")
-	}
-	if err := args.setDefaults(ctx, s.b); err != nil {
-		return nil, err
-	}
-	// Before actually sign the transaction, ensure the transaction fee is reasonable.
-	tx := args.toTransaction()
-	if err := checkTxFee(tx.GasPrice(), tx.Gas(), s.b.RPCTxFeeCap()); err != nil {
-		return nil, err
-	}
-	signed, err := s.sign(args.from(), tx)
-	if err != nil {
-		return nil, err
-	}
-	data, err := signed.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	return &SignTransactionResult{data, signed}, nil
+	return nil, errors.New("eth_signTransaction has been disabled for security reasons - use client-side signing (e.g., MetaMask, hardware wallets) instead")
 }
 
 // eth_pendingTransactions returns the transactions that are in the transaction pool
